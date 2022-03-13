@@ -1,0 +1,112 @@
+library(ape)
+library(ade4)
+?ade4
+###
+### Chapter 3
+###
+#get the sequences
+x <- paste("AJ5345", 26:49, sep = "") 
+x <- c("Z73494", x)
+sylvia.seq <- read.GenBank(x)
+#Compare seqs and compare two method
+sylvia.clus <- clustal(sylvia.seq)
+library(phyloch)
+sylvia.maff <- mafft(sylvia.seq, path = "mafft-win\\mafft.bat")
+identical(sylvia.clus[x, ], sylvia.maff[x, ])
+# true
+taxa.sylvia <- attr(sylvia.seq, "species")
+names(taxa.sylvia) <- names(sylvia.seq)
+# rm(sylvia.seq)
+taxa.sylvia[1] <- "Sylvia_atricapilla"
+taxa.sylvia[24] <- "Sylvia_abyssinica"
+
+sylvia.eco <- read.table("sylvia_data.txt")
+str(sylvia.eco)
+rownames(sylvia.eco)
+save(sylvia.clus, taxa.sylvia, sylvia.eco,
+     file = "sylvia.RData")
+
+###
+### Chapter 5
+###
+
+load("sylvia.RData")
+syl.K80 <- dist.dna(sylvia.clus, pairwise.deletion = TRUE)
+syl.F84 <- dist.dna(sylvia.clus, model = "F84", p = TRUE)
+syl.TN93 <- dist.dna(sylvia.clus, model = "TN93", p = TRUE)
+syl.GG95 <- dist.dna(sylvia.clus, model = "GG95", p = TRUE)
+
+?dist.dna
+
+round(cor(cbind(syl.K80, syl.F84, syl.TN93, syl.GG95)), 3)
+
+syl.JC69 <- dist.dna(sylvia.clus, model = "JC69", p = TRUE)
+syl.raw <- dist.dna(sylvia.clus, model = "raw", p = TRUE)
+# layout(matrix(1:2, 1))
+plot(syl.JC69, syl.raw)
+abline(b = 1, a = 0) # draw x = y line
+plot(syl.K80, syl.JC69)
+abline(b = 1, a = 0)
+
+layout(matrix(1:3, 1))
+for (i in 1:3) {
+  s <- logical(3); s[i] <- TRUE
+  x <- sylvia.clus[, s]
+  d <- dist.dna(x, p = TRUE)
+  ts <- dist.dna(x, "Ts", p = TRUE)
+  tv <- dist.dna(x, "Tv", p = TRUE)
+  plot(ts, d, xlab = "Number of Ts or Tv", col = "blue",
+       ylab = "K80 distance", xlim = range(c(ts, tv)),
+       main = paste("Position", i))
+  points(tv, d, col = "red")
+}
+
+y <- numeric()
+for (i in 1:3) {
+  s <- logical(3); s[i] <- TRUE
+  y <- c(y, dist.dna(sylvia.clus[, s], p = TRUE))
+}
+g <- gl(3, length(y) / 3)
+library(lattice)
+histogram(~ y | g, breaks = 20)
+
+nj.sylvia.K80 <- nj(syl.K80)
+nj.sylvia.GG95 <- nj(syl.GG95)
+dist.topo(nj.sylvia.K80, nj.sylvia.GG95)
+
+grep("Chamaea", taxa.sylvia, value = TRUE)
+f <- function(xx) root(nj(dist.dna(xx, p=TRUE)), "AJ534526")
+tr <- f(sylvia.clus)
+## same than: tr <- root(nj.sylvia.K80, "AJ534526")
+set.seed(12345)
+nj.boot.sylvia <- boot.phylo(tr, sylvia.clus, f, 200,
+                             rooted = TRUE)
+nj.boot.codon <- boot.phylo(tr, sylvia.clus, f, 200, 3,
+                            rooted = TRUE)
+nj.est <- tr
+nj.est$tip.label <- taxa.sylvia[tr$tip.label]
+layout(matrix(1, 1))
+plot(nj.est, no.margin = TRUE)
+nodelabels(round(nj.boot.sylvia / 200, 2), bg = "white")
+add.scale.bar(length = 0.01)
+write.tree(nj.est, "sylvia_nj_k80.tre")
+
+###
+### Chapter 6
+###
+load("sylvia.RData")
+nj.est <- read.tree("sylvia_nj_k80.tre")
+nj.est <- drop.tip(nj.est, "Chamaea_fasciata")
+DF <- sylvia.eco[nj.est$tip.label, ]
+table(DF$geo.range, DF$mig.behav)
+
+syl.er <- ace(DF$geo.range,nj.est,type="discrete",model = "ER" )
+syl.er
+syl.sym <- ace(DF$geo.range, nj.est, type="d", model="SYM")
+syl.sym
+anova(syl.er, syl.sym)
+mod <- matrix(0, 3, 3)
+mod[2, 1] <- mod[1, 2] <- 1
+mod[2, 3] <- mod[3, 2] <- 2
+syl.ard <- ace(DF$geo.range, nj.est, type="d", model=mod)
+syl.ard

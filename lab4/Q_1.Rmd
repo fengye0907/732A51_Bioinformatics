@@ -1,0 +1,254 @@
+---
+title: "Bioinformatics Lab 4, Group 3"
+author: "Roshni Sundaramurthy, Prudhvi Peddmallu, Jiawei Wu, Zijie Feng"
+date: "12 December 2018"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, warning=FALSE, message=FALSE,include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE, include=TRUE)
+```
+
+## Question 1
+
+```{r}
+# install_github("seandavi/GEOquery")
+library(GEOquery)
+```
+
+The GEOquery library is loaded to perform the Gene Expression methods.
+
+```{r}
+#Get the Gene Expression Omnibus (GEO) data
+x = getGEOSuppFiles("GSE20986")
+x
+```
+
+Using getGEOSuppFiles (Get Supplemental Files from GEO), the supplemental files based on the GEO accession number (*GSE20986*) is obtained. And it is a dataframe containing 1 object of 7 variables.
+
+```{r}
+# untarring the data
+untar("GSE20986/GSE20986_RAW.tar", exdir = "data")
+
+# gunzipping the data
+cels = list.files("data/", pattern = "[gz]")
+sapply(paste("data", cels, sep = "/"), gunzip)
+```
+
+The file is extracted and the contents of a tar archive is listed using untar function. The data folder has been created. The list.files function produces a character vector of the names of files.
+
+```{r}
+# creating your phenodata
+phenodata <- matrix(rep(list.files("data"), 2), ncol =2)
+class(phenodata)
+```
+
+Now importing "phenotype" data, describing the experimental design of our dataset. It is of type matrix.
+
+```{r}
+phenodata <- as.data.frame(phenodata)
+colnames(phenodata) <- c("Name", "FileName")
+phenodata$Targets <- c("iris", 
+                       "retina", 
+                       "retina", 
+                       "iris", 
+                       "retina", 
+                       "iris", 
+                       "choroid", 
+                       "choroid", 
+                       "choroid", 
+                       "huvec", 
+                       "huvec", 
+                       "huvec")
+write.table(phenodata, "data/phenodata.txt", quote = F, sep = "\t", row.names = F)
+```
+
+The column names of phenodata has been changed. A new variable "Target" is created consisting of iris, retina,choroid and huvec. The  phenodata now consists of 12 objects with 3 variables and it is saved as a text file in data folder for further use.
+
+```{r}
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("simpleaffy")
+library(simpleaffy)
+```
+
+Loading the required package *simpleaffy* along with genefilter.
+
+```{r}
+celfiles <- read.affy(covdesc = "phenodata.txt", path = "data")
+boxplot(celfiles)
+# the median and quartiles are similar in different examples
+```
+
+The text file phenodata which defines phenotypic data for a set of .CEL files is read using read.affy to create the AffyBatch object. Now the size of arrays is 1164x1164 features (23 kb), number of samples=12 and number of genes=54675.
+The boxplots enable us to study the distributional characteristics of a group. From the plot, it is noted that only names of the three tissues are displayed and they are GSM524662.CEL for iris, GSM524666.CEL for retina and GSM524670.CEL for choroid. It is quite hard to find relationship between every objects since it is not well displayed with object names (specified cells).
+
+```{r}
+library(RColorBrewer)
+cols = brewer.pal(8, "Set1")
+eset <- exprs(celfiles)
+samples <- celfiles$Targets
+colnames(eset)
+```
+
+To overcome the above discomfort, the good colour palettes for thematic maps have been created. The generic function *exprs* retrieves the expression data from eSets and the result is a large matrix.
+
+```{r}
+colnames(eset) <- samples
+boxplot(celfiles, col = cols, las = 2)
+```
+
+The names in the samples has been assigned to eset column names for easy view. The colourful boxplot for our data is created. Now the plot is clear enough to find and analyse various cells from 4 tissues of our dataset. The median marks the mid-point of the data and is shown by the line that divides the box into two parts. The upper whisker seems to be longer than the lower whisker. It denotes that the upper whisker stretched over the wide range of values.
+
+```{r}
+distance <- dist(t(eset), method = "maximum")
+clusters <- hclust(distance)
+plot(clusters)
+```
+
+The distances between the rows of a data matrix eset has been measured by using maximum distance measure. Then performing the hierarchical cluster analysis for several objects being clustered. The cluster dendogram is plotted with heights in y axis and distance in x axis. The height ranges from 0-60000. The distance is basically the dissimilarities between the clusters. Form the plots, we can observe 2 big clusters. One comprises of iris and choroid, other comprises of huvec and retina. Unfortunately, two outliers huvec and retina are observed.
+
+```{r}
+require(simpleaffy)
+# devtools::install.github("bmbolstad/affyPLM")
+require(affyPLM)
+```
+
+Using the required packages simpleaffy anf affyPLM. 
+
+```{r}
+celfiles.gcrma = gcrma(celfiles)
+```
+
+This gcrma function converts an AffyBatch into an ExpressionSet using the robust multi-array average (RMA) expression measure with help of probe sequence. First the affinities have been calculated. Then normalizing and calculating expression.
+
+```{r}
+par(mfrow=c(1,2))
+boxplot(celfiles, col = cols, las = 2, main = "Pre-Normalization")
+boxplot(celfiles.gcrma, col = cols,  main = "Post-Normalization")
+```
+
+Using par() to create 1 x 2 pictures on one plot. Before applying normalization technique, it seems that the upper whiskers for all objects are uneven and also the 4th box (violet) named 24665.CEL has no lower whisker.
+After normalization, all boxes seems to have equal length and upper whiskers are evenly distributed with minute height variations. The median seems to be appear at the bottom of the boxes.
+
+```{r}
+dev.off()
+```
+
+This functions provide control over multiple graphics devices.
+
+```{r}
+# Cluster Dendrogram based on post-normalization
+eset2 <- exprs(celfiles.gcrma)
+# colnames(eset2) <- samples
+distance2 <- dist(t(eset2), method = "maximum")
+clusters <- hclust(distance2)
+plot(clusters)
+```
+
+Again the distance is measured for the normalized data and the cluster dendogram is represented. But here the height ranges from 2-10.
+
+```{r}
+library(limma)   #loading package
+```
+
+```{r}
+phenodata      # displaying phenodata dataset
+```
+
+```{r}
+samples <- as.factor(samples)
+design <- model.matrix(~0+samples)
+colnames(design)
+```
+
+model.matrix creates a design matrix, e.g., by expanding factors to a set of dummy variables (depending on the contrasts) and expanding interactions similarly. The *design* matrix consists of 0s and 1s for all 4 features.
+
+```{r}
+colnames(design) <- c("choroid", "huvec", "iris", "retina")
+design
+```
+
+Changing the column names of design matrix for proper data.
+
+```{r}
+contrast.matrix = makeContrasts(
+              huvec_choroid = huvec - choroid, 
+              huvec_retina = huvec - retina, 
+              huvec_iris <- huvec - iris, 
+              levels = design)
+
+fit = lmFit(celfiles.gcrma, design)
+huvec_fit <- contrasts.fit(fit, contrast.matrix)
+huvec_ebay <- eBayes(huvec_fit)
+```
+
+Using makeContrasts function from limma package. It construct the contrast matrix corresponding to specified contrasts of a set of parameters. The specified contrasts are huvec_choroid, huvec_retina, huvec_iris. Fitting linear model for normalized data. The estimated coefficients and standard errors for a given set of contrasts are computed from linear model fit. Using eBayes method, the moderated t-statistics, moderated F-statistic, and log-odds of differential expression, p-values are computed.
+
+```{r}
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# BiocManager::install("hgu133plus2.db", version = "3.8")
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("hgu133plus2.db")
+library(hgu133plus2.db)
+```
+
+RNA extracts from endothelial cells were hybridised to Affymetrix HGU133plus2 arrays in triplicate.
+
+```{r}
+#biocLite("annotate")
+library(annotate)
+```
+
+```{r}
+probenames.list <- rownames(topTable(huvec_ebay, number = 100000))
+getsymbols <- getSYMBOL(probenames.list, "hgu133plus2")
+results <- topTable(huvec_ebay, number = 100000, coef = "huvec_choroid")
+results <- cbind(results, getsymbols)
+```
+
+The table of the top-ranked genes from a linear model fit is extracted by specifying 100000 maximum number of genes to list. The rownames of this is assigned to probenames.list. Mapping the set of manufacturers identifiers to other identifiers using getSYMBOL().
+
+The statistical values such as logFC, p-value, t, adjusted p values for all top ranked genes for huvec choroid pair are computed and stored in results. 
+
+```{r}
+summary(results) #To make thresholds
+```
+
+```{r}
+results$threshold <- "1"
+a <- subset(results, adj.P.Val < 0.05 & logFC > 5)
+results[rownames(a), "threshold"] <- "2"
+b <- subset(results, adj.P.Val < 0.05 & logFC < -5)
+results[rownames(b), "threshold"] <- "3"
+table(results$threshold)
+```
+
+Adding threshold column to the *results* dataframe. Subsetting (filtering) the data based on specified conditions such as * adj.P.Val < 0.05 & logFC > 5 *. Changing the threshold values for these specific conditioned data as "2". Again subsetting the datas and changing threshold value as 3 for these datas. The table shows the threshold values such that, number of objects having threshold as 1 is higher than the other 2 threshold values.
+
+```{r}
+library(ggplot2)
+volcano <- ggplot(data = results, 
+                  aes(x = logFC, y = -1*log10(adj.P.Val), 
+                      colour = threshold, 
+                      label = getsymbols))
+
+volcano <- volcano + 
+  geom_point() + 
+  scale_color_manual(values = c("black", "red", "green"), 
+                     labels = c("Not Significant", "Upregulated", "Downregulated"), 
+                     name = "Key/Legend")
+
+volcano + 
+  geom_text(data = subset(results, logFC > 5 & -1*log10(adj.P.Val) > 5), aes(x = logFC, y = -1*log10(adj.P.Val), colour = threshold, label = getsymbols))+
+  ggtitle("Volcano plot for huvec-retina pair")+theme_bw()
+```
+
+The volcano plot has been created using ggplot(). It plots significance versus fold-change on the y and x axes, respectively. Fold change (x axis) is plotted against statistical significance (y axis) for each set. Genes upregulated with a fold change >=5 and p<0.05 are depicted in red, and those downregulated with a fold change < -5 and p<0.05 are shown in green. Black represents genes in the arrays that were not found to differ significantly. 
+
+```{r}
+paste("Total genes for huvec-choroid pair:")
+table(results$threshold)
+```
+
+When threshold=2, 33 genes (Red) are differentially expressed ones and When threshold=3, 55 (green) genes are differentially expressed ones. So, totally *88 genes* are classified as differentially expressed genes.

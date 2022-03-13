@@ -1,0 +1,393 @@
+---
+title: "Lab 2 Bioinformatics"
+author: "Masinde, Maria, Jasleen, Mathew"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+  
+# Preliminary
+Packages used in this exercise.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#--- ape ---
+library(ape)
+
+#--- seqinr ---
+library(seqinr)
+
+#--- simulation ---
+library(phangorn)
+
+#--- msa ---
+library(msa)
+
+library(markovchain)
+
+```
+
+```{r fasta_read, echo=FALSE}
+# --- reading in the lizard fasta file
+lizard_seqs <- read.fasta(
+  file = "lizard_seqs.fasta",
+  seqtype = "DNA"
+)
+
+# remove unwanted characters
+liz <- lapply(lizard_seqs, function(x){
+  x[!x %in% c(" ", "y", "r", "m", "s")]
+  }
+)
+```
+
+
+# Question 1.
+There are gaps in the sequence in each of the accession sequences. Points of **puRines (R)**, **pYrimidines (Y)**, **aMino groups bases (M)** and **strong interaction (S)**. Adenine have the highest composition percentage at each of the accession numbers. Area of strong interaction only occurs at accession number "FJ356747". Overall, these imply the sequences are incomplete. In the simulations gaps and all other non ACTG are removed.
+
+The length of the sequnces at the first five accessions are as below.
+
+```{r length1, echo=FALSE}
+#--- length and composition of the sequences ---
+lapply(lizard_seqs, length)[1:5]
+```
+
+First five accession base compositions:
+```{r basecomp1, echo=FALSE, eval=FALSE}
+lapply(lizard_seqs, table)[1:5]
+```
+
+The first five accession GC are as follows: 
+```{r }
+#--- GC content of each ---
+lapply(lizard_seqs, GC)[1:5]
+```
+
+
+## Question 1.1
+Artificial DNA simulation; each nucleotide randomly and independently drawn from base frequencies.
+
+```{r sims}
+bcomps <- lapply(lizard_seqs, table)
+
+#--- simulation fxn ---
+
+set.seed(12345)
+sims <- function(x){
+  
+  x <- lapply(x, function(x){x[c("a","c","g","t")]})
+  # x is base compositions
+  
+  # return a list of sequences
+  art_sims <- list()
+  
+  # simulations
+  for (i in 1:length(x)) {
+    art_sims[[paste("synthetic", i, sep = "_")]] <- sample(
+      names(x[[i]]),
+      size = sum(x[[i]]),
+      replace = TRUE,
+      prob = x[[i]]/sum(x[[i]])
+    )
+  }
+  
+  return(art_sims)
+}
+
+sim1_seq <- sims(bcomps)
+```
+
+The first five base frequencies are presented below. We observed that in most of the simulated sequence the a's had higher frequencies while in the origin  sequence all the accessions had a's with highest frequency.
+
+```{r bcsim1, echo=FALSE}
+basecomposition_sim_seq <- lapply(sim1_seq, table)
+
+basecomposition_sim_seq[1:5]
+```
+
+
+```{r fastasave}
+#--- saving simulation as fasta file
+ape::write.dna(sim1_seq, file ="sim1_seq.fasta", format = "fasta", append =FALSE, nbcol = 6, colsep = " ", colw = 10)
+```
+
+
+##Question 1.2
+
+```{r tree}
+#---- creating a phylogenetic tree with 33 nodes
+set.seed(12345)
+tree <- rtree(n = 33)
+
+plot(tree)
+```
+
+We opted to simulate sequences using a custom transition matrix Q where probabiliy of mutation is 0.1. Base frequencies of each of the accessions are used in the simulation. The DNA sequences are saved as a fasta file **sim2_seq.fasta**.
+
+```{r simseq}
+#simulating the sequence 
+
+Q_mat <- matrix(data= c(0.9,0.1,0.1,0.1,0.1,0.9,0.1,0.1,0.1,0.1,0.9,0.1,0.1,0.1,0.1,0.9),4,4)
+
+base_f <- as.vector(bcomps[[1]][c("a","c","g","t")])/sum(bcomps[[1]][c("a","c","g","t")])
+
+data <- simSeq(tree, l = 1000, type="DNA", bf=base_f, Q=Q_mat)
+
+counter = 1
+sim2_seq = list()
+for (i in 1:length(data))
+{
+  sim2_seq[[paste("synthetic2", i, sep = "_")]] <- as.character(data)[counter:(counter+1000)]
+  counter = counter + 1000
+}
+
+```
+
+```{r fastasave2, echo=FALSE}
+#saving as fasta file
+
+ape::write.dna(sim2_seq, file ="sim2_seq.fasta", format = "fasta", append =FALSE, nbcol = 6, colsep = " ", colw = 10)
+```
+
+A sample of the base compostion on the simulated sequences is shown below. The base frequencies are almost similar to the original sequence with a's and t's having higher frequencies.
+
+```{r bcomp2, echo=FALSE}
+basecomposition_sim2_seq <- lapply(sim2_seq, table)
+
+basecomposition_sim2_seq[1:5]
+```
+
+##Question 2
+
+## Question 2.1
+Basic statistics on GC content.
+
+```{r GC1}
+gc1 <- lapply(lizard_seqs, GC)
+gc1[1:5]
+```
+
+
+```{r GC2}
+# GC content of sim1_seq
+gc2 <- lapply(sim1_seq, GC)
+gc2[1:5]
+```
+
+
+```{r}
+# omit na from sim2_seq
+sim2_seq <- lapply(sim2_seq, na.omit)
+gc3 <- lapply(sim2_seq, GC)
+gc3[1:5]
+```
+
+AT content for original lizard sequence first 5. Computed as 1 - GC content.
+```{r AT1}
+
+at1 <- list()
+
+for (i in 1:length(gc1)) {
+  at1[[i]] <- 1 -gc1[[i]]
+}
+
+at1[1:5]
+```
+
+AT content for independence sequence simulation.
+```{r AT2}
+at2 <- list()
+for (i in 1:length(gc2)) {
+  at2[[i]] <- 1 - gc2[[i]]
+}
+
+at2[1:5]
+```
+
+AT content of simulated sequence from tree
+
+```{r AT3}
+at3 <- list()
+for (i in 1:length(gc3)) {
+  at3[[i]] <- 1 - gc3[[i]]
+}
+
+at3[1:5]
+```
+For all the sequences AT content was greater than 50%.
+
+Base compositions:
+
+```{r}
+lapply(lizard_seqs, table)[1:5]
+```
+
+```{r}
+# base composition of sim2_seq
+lapply(sim1_seq, table)[1:5]
+```
+
+```{r}
+# base compostion of sim1_seq
+lapply(sim2_seq, table)[1:6]
+```
+
+We used the translate function from package **seqinr** to obtain the protein sequences of each of the three data sets. We noticed that the simulated sequence using independence model the accessions had higher number of stop codons compared to the original sequences data sets. Some accessions had as high as 73 stop codons. 
+
+```{r trans, eval=FALSE}
+p_seq1 <- lapply(lizard_seqs, translate)
+
+p_seq2 <- lapply(sim2_seq, translate)
+
+p_seq3 <- lapply(sim1_seq, translate)
+```
+
+## Question 2.2
+
+Markov chains were fitted for the lizards sequences and the artificial sequences, from the transition matrix obtained we have understood that the markov chain is of order 1. Thus, the current state only depends on the immediate previous state.  
+
+```{r}
+markov1 <-markovchainFit(sim1_seq)
+
+markov2 <-markovchainFit(sim2_seq)
+
+markov_initial <-markovchainFit(lizard_seqs)
+```
+
+
+```{r}
+#Align sequences
+
+Lizard_seq_align <- msa(readDNAStringSet("lizard_seqs.fasta"))
+sim1_seq_align <- msa(readDNAStringSet("sim1_seq.fasta"))
+sim2_seq_align <- msa(readDNAStringSet("sim2_seq.fasta"))
+
+Lizard_seq_align_c <- msaConvert(Lizard_seq_align, type="seqinr::alignment")
+sim1_seq_align_c <- msaConvert(sim1_seq_align, type="seqinr::alignment")
+sim2_seq_align_c <- msaConvert(sim2_seq_align, type="seqinr::alignment")
+
+
+dist_mat1 <- as.matrix(dist.alignment(Lizard_seq_align_c, matrix = "identity"))
+dist_mat2 <- as.matrix(dist.alignment(sim1_seq_align_c, matrix = "identity"))
+dist_mat3 <- as.matrix(dist.alignment(sim2_seq_align_c, matrix = "identity"))
+
+
+heatmap(dist_mat1, main = "Lizard sequence")
+heatmap(dist_mat2, main = "Simulated sequence 1")
+heatmap(dist_mat3, main = "Simulated Sequence 2")
+
+```
+
+From the heat map of the lizard sequence we observe clusters on the anti-diagonal.The clusters in this heatmap represent species that are having similar traits. The heat maps of the simulated sequences does not have distinguishable clusters, this can be attributed to the fact that these sequences have no biological significance since they are randomly generated from the original sequences. 
+
+##Question3
+
+```{r}
+#fun <- function(x) as.phylo(hclust(dist.dna(x), "average")) # upgma() in phangorn
+#tree <- fun(Lizard_seq_align_d)
+#bstrees <- boot.phylo(tree, Lizard_seq_align_d, fun, trees = TRUE)$trees
+
+f <- function(x) upgma(x)
+
+tree <- f(dist_mat1)
+bstrees <- boot.phylo(tree, dist_mat1, f, trees = TRUE)$trees
+
+sim1_tree <- f(dist_mat2)
+bstrees_sim1 <- boot.phylo(sim1_tree, dist_mat2, f, trees = TRUE)$trees
+
+sim2_tree <- f(dist_mat3)
+bstrees_sim2 <- boot.phylo(sim2_tree, dist_mat3, f, trees = TRUE)$trees
+
+
+
+```
+
+
+```{r}
+
+# clads
+
+clad_l_seq <- prop.clades(tree, bstrees, rooted = TRUE)
+clad_sim1 <- prop.clades(sim1_tree, bstrees_sim1, rooted = TRUE)
+clad_sim2 <- prop.clades(sim2_tree, bstrees_sim2, rooted = TRUE)
+
+# bipartitions
+
+boot <- prop.clades(tree, bstrees)
+layout(1)
+par(mar = rep(2, 4))
+
+boot_sim1 <- prop.clades(sim1_tree, bstrees_sim1)
+layout(1)
+par(mar = rep(2, 4))
+
+boot_sim2 <- prop.clades(sim2_tree, bstrees_sim2)
+layout(1)
+par(mar = rep(2, 4))
+
+```
+
+
+```{r}
+#plot of main DNA
+plot(tree, main = "Bipartition vs. Clade Support Values", sub = "Lizard Sequence")
+drawSupportOnEdges(boot)
+nodelabels(clad_l_seq)
+legend("bottomleft", legend = c("Bipartitions", "Clades"), pch = 22,
+       pt.bg = c("green", "lightblue"), pt.cex = 2.5)
+```
+
+
+```{r}
+#Plot synthetic sequence 1
+plot(sim1_tree, main = "Bipartition vs. Clade Support Values", sub = "Simulated Sequence 1")
+drawSupportOnEdges(boot_sim1)
+nodelabels(clad_sim1)
+legend("bottomleft", legend = c("Bipartitions", "Clades"), pch = 22,
+       pt.bg = c("green", "lightblue"), pt.cex = 2.5)
+```
+
+```{r}
+#plot synthetic sequence 2
+plot(sim2_tree, main = "Bipartition vs. Clade Support Values", sub = "Simulated Sequence 2")
+drawSupportOnEdges(boot_sim2)
+nodelabels(clad_sim2)
+legend("bottomleft", legend = c("Bipartitions", "Clades"), pch = 22,
+       pt.bg = c("green", "lightblue"), pt.cex = 2.5)
+```
+
+We have used UPGMA function and passed distance matrices into it to construct the phylogenitic trees. The trees generated from simulated sequences are not similar to the tree generated from the lizard sequence. We used boot.phylo to bootstrap the trees and then function prop.clades was used to measure the clades. The clade values in the plot show the number of bootstrap trees (out of 100) that share the same clade as with the input tree.
+
+```{r}
+treedist(
+  tree1 = tree,
+  tree2 = sim1_tree,
+  check.labels = FALSE
+)
+```
+
+```{r}
+treedist(
+  tree1 = tree,
+  tree2 = sim2_tree,
+  check.labels = FALSE
+)
+```
+
+```{r}
+treedist(
+  tree1 = sim1_tree,
+  tree2 = sim2_tree,
+  check.labels = FALSE
+)
+```
+
+
+```{r}
+comparePhylo(tree, sim1_tree, plot = FALSE, force.rooted = FALSE,
+             use.edge.length = FALSE)
+comparePhylo(tree, sim2_tree, plot = FALSE, force.rooted = FALSE,
+             use.edge.length = FALSE)
+comparePhylo(sim1_tree, sim2_tree, plot = FALSE, force.rooted = FALSE,
+             use.edge.length = FALSE)
+```
+
+We used treedist function to calculate the distance between the original tree and simulated tree and as expected we find considerable difference in distance measures. We also used comparePhylo function which uses values of similarity/dissimilarity. The number of tips in all the trees are the same (equal to 33), but the branches and structure of the trees are significantly different. 

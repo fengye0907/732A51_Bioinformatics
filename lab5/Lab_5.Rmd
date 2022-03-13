@@ -1,0 +1,123 @@
+---
+title: "Bioinformatics Lab 5, Group 3"
+author: "Roshni Sundaramurthy, Prudhvi Peddmallu, Jiawei Wu, Zijie Feng"
+date: "11 December 2018"
+output: pdf_document
+---
+
+## Rule-based classification and visualization
+### Task 1
+
+```{r message=FALSE, warning=FALSE}
+Sys.setlocale(locale = "english")
+#install.packages("devtools")
+library(devtools)
+#install_github("mategarb/R.ROSETTA")
+library(R.ROSETTA)
+```
+
+### Task 2
+
+```{r message=FALSE, warning=FALSE}
+autism_df<-autcon
+#View(autism_df)
+conf_matrix <- table(autism_df$decision)
+paste("Confusion matrix:")
+conf_matrix
+```
+
+#### Analysis:
+
+**Description of dataset autcon**
+
+It is a sample dataset of gene expression values. The objects are divided into two decision classes: male children with autism and healthy ones. The features are represented by genes. There seems 146 children datas and 35 genes. The class variable is "Decision". This variable differentiates the children whether they are affected by autism or not.
+
+Number of features: 35
+Number of objects: 146
+
+The confusion matrix is created using table function. The result seems to have two decision classes
+
+1. Male children with autism (82)
+2. Healthy male children (64)
+
+So, we can conclude that the distribution of objects is not balanced.
+
+### Task 3
+
+```{r message=FALSE, warning=FALSE}
+autconDefault <- rosetta(autism_df)
+# Rule table information
+tab_info <- autconDefault$main
+# quality statistics of the model
+model_stats <- autconDefault$quality
+
+# Significant rules
+library(dplyr)
+sig_rules <- tab_info %>% filter(PVAL<0.05)
+cat(paste("Number of obtained rules:", count(sig_rules)))
+```
+
+#### Analysis:
+
+a) Cross validation:
+
+Cross-validation (CV) is a technique to assess the generalizability of a model to unseen data. This technique relies on assumptions that may not be satisfied when studying genomics datasets. The data is partitioned into equally sized subsets. k-fold cross-validation is the most commonly used technique for model assessment.
+
+The argument "cvNum" in rosetta is a numeric value of the cross-validation number. The default is **10**.
+
+b) Default reduction method:
+
+The default reduction method is *Johnson* reducer method, or Johnson-Lindenstrauss theorem. It is used to map original data from a high dimension space into a low dimension space at an enough small cost.
+
+c) Default method of discretization:
+
+The default method of discretization is *EqualFrequency* method. It is a single-variable unsupervised-learning equal-frequency algorithm. It distributes nearly equal number of objects in different intervals according to the histogram of each variable. The default number of discretization bins calculated is *3*.
+
+d) Accuracy of the model:
+
+According to the `model_stats`, the accuracy of our model is shown as follow:
+
+```{r table2, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "  
+| Accuracy    |     Value       | 
+|-------------|:---------------:|
+| Mean        |     0.821818    |       
+| Median      |     0.8         |        
+| Std         |     0.083158    | 
+| Min         |     0.733333    | 
+| Max         |     1           | 
+"
+cat(tabl)
+```
+
+e) Rules:
+
+Totally 185 rules have been obtained. The class **control** gets more significant rules.
+
+```{r message=FALSE, warning=FALSE}
+cat(paste("Top 3 significant rules:"))
+head(tab_info,3)
+```
+
+### Task 4
+
+```{r message=FALSE, warning=FALSE}
+# saving file
+saveLineByLine(sig_rules, "outputFile.txt")
+```
+
+### Task 5
+
+As instructed, using the VisuNet tool at http://bioinf.icm.uu.se/~visunet/, the following image has been generated.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, out.width=}
+# should attach the image
+knitr::include_graphics("task6.PNG")
+```
+
+### Task 6 Investigating the connections present on the networks
+
+In the picture we can see that two clusters obatined one at the top and one at the bottom. Red nodes represent the genes that have high expression values and green that have low expression values. The nodes with thick blue outline represent that they have a large number of rules. 
+
+We observed that node PSMG4=3 is highlighted with most of red circles in bottom cluster and inter linked with other genes (e.g. SCIN=2, NCS1=2, NCS1=3). The MAP7=3 seems to be the most significant node in the top cluster. COX2=3 has the most number of rules. Most of the strongest connections appear in the bottom cluster.
+
